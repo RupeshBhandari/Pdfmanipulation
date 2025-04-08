@@ -6,17 +6,48 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      text-align: center;
+      padding: 20px;
+    }
+
+    input, button {
+      margin: 10px;
+      padding: 10px 15px;
+      font-size: 16px;
+      background: #222;
+      color: #eee;
+      border: 1px solid #555;
+      border-radius: 5px;
+    }
+
+    button:hover {
+      background: #444;
+      cursor: pointer;
+    }
+
     canvas {
-      filter: invert(100%);
-      margin-bottom: 10px;
+      margin: 10px 0;
+      max-width: 100%;
+      border: 1px solid #333;
+    }
+
+    #viewer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
   </style>
 </head>
 <body>
-  <h2>Invert PDF Colors (Client-Side)</h2>
+  <h1>PDF Dark Mode Converter</h1>
+  <p>Select a PDF file to invert its colors (locally in your browser)</p>
   <input type="file" id="upload" accept="application/pdf">
-  <div id="viewer"></div>
   <button id="download">Download Inverted PDF</button>
+  <div id="viewer"></div>
 
   <script>
     const upload = document.getElementById('upload');
@@ -43,6 +74,18 @@
         canvas.height = viewport.height;
 
         await page.render({ canvasContext: context, viewport }).promise;
+
+        // Invert the pixel colors manually
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let j = 0; j < data.length; j += 4) {
+          data[j] = 255 - data[j];     // Red
+          data[j + 1] = 255 - data[j + 1]; // Green
+          data[j + 2] = 255 - data[j + 2]; // Blue
+          // Alpha (data[j + 3]) stays the same
+        }
+        context.putImageData(imageData, 0, 0);
+
         viewer.appendChild(canvas);
         canvases.push(canvas);
       }
@@ -54,8 +97,12 @@
 
       canvases.forEach((canvas, index) => {
         const imgData = canvas.toDataURL('image/png');
+        const imgProps = pdfDoc.getImageProperties(imgData);
+        const pdfWidth = pdfDoc.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
         if (index !== 0) pdfDoc.addPage();
-        pdfDoc.addImage(imgData, 'PNG', 10, 10, 190, 0); // Auto height
+        pdfDoc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       });
 
       pdfDoc.save('inverted.pdf');
