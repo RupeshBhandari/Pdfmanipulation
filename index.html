@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Invert PDF Colors</title>
+  <title>Bulk PDF Color Inverter</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
@@ -29,83 +29,94 @@
       cursor: pointer;
     }
 
-    canvas {
-      margin: 10px 0;
-      max-width: 100%;
-      border: 1px solid #333;
+    .pdf-preview {
+      margin-top: 30px;
     }
 
-    #viewer {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+    canvas {
+      margin: 5px 0;
+      max-width: 90%;
+      border: 1px solid #333;
     }
   </style>
 </head>
 <body>
-  <h1>PDF Dark Mode Converter</h1>
-  <p>Select a PDF file to invert its colors (locally in your browser)</p>
-  <input type="file" id="upload" accept="application/pdf">
-  <button id="download">Download Inverted PDF</button>
-  <div id="viewer"></div>
+  <h1>Bulk PDF Dark Mode Converter</h1>
+  <p>Select multiple PDF files to invert colors (client-side only)</p>
+  <input type="file" id="upload" accept="application/pdf" multiple>
+  <div id="status"></div>
+  <div id="previews"></div>
 
   <script>
     const upload = document.getElementById('upload');
-    const viewer = document.getElementById('viewer');
-    const download = document.getElementById('download');
-    let canvases = [];
+    const statusDiv = document.getElementById('status');
+    const previewsDiv = document.getElementById('previews');
 
     upload.addEventListener('change', async (e) => {
-      viewer.innerHTML = '';
-      canvases = [];
+      previewsDiv.innerHTML = '';
+      const files = Array.from(e.target.files);
 
-      const file = e.target.files[0];
-      if (!file) return;
+      for (const file of files) {
+        const fileName = file.name.replace(/\.pdf$/i, '');
+        statusDiv.innerHTML = `Processing <b>${file.name}</b>...`;
 
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const canvases = [];
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
 
-        await page.render({ canvasContext: context, viewport }).promise;
+          await page.render({ canvasContext: context, viewport }).promise;
 
-        // Invert the pixel colors manually
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        for (let j = 0; j < data.length; j += 4) {
-          data[j] = 255 - data[j];     // Red
-          data[j + 1] = 255 - data[j + 1]; // Green
-          data[j + 2] = 255 - data[j + 2]; // Blue
-          // Alpha (data[j + 3]) stays the same
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          for (let j = 0; j < data.length; j += 4) {
+            data[j] = 255 - data[j];       // Red
+            data[j + 1] = 255 - data[j + 1]; // Green
+            data[j + 2] = 255 - data[j + 2]; // Blue
+          }
+          context.putImageData(imageData, 0, 0);
+          canvases.push(canvas);
         }
-        context.putImageData(imageData, 0, 0);
 
-        viewer.appendChild(canvas);
-        canvases.push(canvas);
+        const { jsPDF } = window.jspdf;
+        const pdfDoc = new jsPDF();
+
+        canvases.forEach((canvas, index) => {
+          const imgData = canvas.toDataURL('image/png');
+          const imgProps = pdfDoc.getImageProperties(imgData);
+          const pdfWidth = pdfDoc.internal.pageSize.getWidth();
+          const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+          if (index !== 0) pdfDoc.addPage();
+          pdfDoc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        });
+
+        // Create a link to download the PDF
+        const outputBlob = pdfDoc.output('blob');
+        const url = URL.createObjectURL(outputBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${fileName}_inverted.pdf`;
+        link.textContent = `Download ${fileName}_inverted.pdf`;
+        link.style.display = 'block';
+        link.style.margin = '10px auto';
+
+        const container = document.createElement('div');
+        container.className = 'pdf-preview';
+        container.innerHTML = `<h3>${file.name}</h3>`;
+        canvases.forEach(canvas => container.appendChild(canvas));
+        container.appendChild(link);
+        previewsDiv.appendChild(container);
       }
-    });
 
-    download.addEventListener('click', () => {
-      const { jsPDF } = window.jspdf;
-      const pdfDoc = new jsPDF();
-
-      canvases.forEach((canvas, index) => {
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = pdfDoc.getImageProperties(imgData);
-        const pdfWidth = pdfDoc.internal.pageSize.getWidth();
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-        if (index !== 0) pdfDoc.addPage();
-        pdfDoc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      });
-
-      pdfDoc.save('inverted.pdf');
+      statusDiv.innerHTML = `<strong>All files processed!</strong>`;
     });
   </script>
 </body>
