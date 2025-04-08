@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invert PDF Colors</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    canvas {
+      filter: invert(100%);
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Invert PDF Colors (Client-Side)</h2>
+  <input type="file" id="upload" accept="application/pdf">
+  <div id="viewer"></div>
+  <button id="download">Download Inverted PDF</button>
+
+  <script>
+    const upload = document.getElementById('upload');
+    const viewer = document.getElementById('viewer');
+    const download = document.getElementById('download');
+    let canvases = [];
+
+    upload.addEventListener('change', async (e) => {
+      viewer.innerHTML = '';
+      canvases = [];
+
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: context, viewport }).promise;
+        viewer.appendChild(canvas);
+        canvases.push(canvas);
+      }
+    });
+
+    download.addEventListener('click', () => {
+      const { jsPDF } = window.jspdf;
+      const pdfDoc = new jsPDF();
+
+      canvases.forEach((canvas, index) => {
+        const imgData = canvas.toDataURL('image/png');
+        if (index !== 0) pdfDoc.addPage();
+        pdfDoc.addImage(imgData, 'PNG', 10, 10, 190, 0); // Auto height
+      });
+
+      pdfDoc.save('inverted.pdf');
+    });
+  </script>
+</body>
+</html>
